@@ -1,0 +1,5 @@
+---
+destination_location: "/opt/tomcat/webapps/"
+buildartifact_location: "target/*.war"
+changedir_location: "/home/devops"
+...

@@ -1,0 +1,16 @@
+- name: Deploy the latest war file to apache tomcat
+  hosts: deploy
+  become: true
+  vars:
+    - destination_location: "/opt/tomcat/webapps/"
+    - buildartifact_location: "files/student.war"
+  tasks:
+    - name: Copy file with owner and permissions
+      copy:
+        src: "{{ buildartifact_location }}"
+        dest: "{{ destination_location }}"
+        owner: devops
+        group: devops
+        mode: u+rwx,g+rwx,o-rwx
+        remote_src: no
+      register: copy_status

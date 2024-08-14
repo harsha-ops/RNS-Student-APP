@@ -1,0 +1,85 @@
+pipeline {
+    
+    agent {
+        label "build-server"
+    }
+
+    tools {
+        // Install the Maven version configured as "M3" and add it to the path.
+        maven "maven3"
+    }
+
+    stages {
+        stage('Prepare-Environment') {
+            steps {
+
+                git branch: 'main', credentialsId: 'gitlab', url: 'https://gitlab.com/rns-app/student-app.git'
+
+                // Run Maven on a Unix agent.
+                sh "mvn clean compile"
+            }
+        }
+
+        stage('Unit Tests') {
+
+            steps {
+
+                //withEnv(["JAVA_HOME=${tool 'java8'}", "PATH=${tool 'java8'}/bin:${env.PATH}"]) {
+                    // Run Maven on a Unix agent.
+                    sh "echo 2 | sudo alternatives --config java"
+                    sh 'java -version'
+                    sh "mvn clean test"
+                //}
+            }
+        }
+
+        stage('Packaging') {
+
+            steps {
+
+                // Run Maven on a Unix agent.
+                sh "echo 1 | sudo alternatives --config java"
+                sh 'java -version'
+                sh "mvn clean package -DskipTests"
+
+            }
+            post {
+                success {
+                   archiveArtifacts artifacts: '**/*.war', followSymlinks: false
+                }
+            }
+        }
+        
+        stage('DB Schema') {
+
+            steps {
+
+                // Run Maven on a Unix agent.
+                ansiblePlaybook become: true, becomeUser: 'devops', installation: 'ansible', inventory: 'ansible/hosts', playbook: 'ansible/create_db_schema.yml'
+
+            }
+            
+        }
+        
+        stage('App Deplyment'){
+            steps{
+                sh "cp target/*.war ansible/files/student.war"
+                ansiblePlaybook become: true, becomeUser: 'devops', installation: 'ansible', inventory: 'ansible/hosts', playbook: 'ansible/deploy_war_file_tomcat.yml'
+            }
+        }
+        
+        stage('Integration Testing') {
+
+            steps {
+
+                //withEnv(["JAVA_HOME=${tool 'java8'}", "PATH=${tool 'java8'}/bin:${env.PATH}"]) {
+                    // Run Maven on a Unix agent.
+                    sh "echo 2 | sudo alternatives --config java"
+                    sh 'java -version'
+                    sh "mvn clean verify"
+                //}
+            }
+        }
+        
+    }
+}

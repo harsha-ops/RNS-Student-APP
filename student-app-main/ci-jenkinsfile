@@ -1,0 +1,64 @@
+def version = "1.0"
+
+pipeline {
+    agent {
+        label "buildserver"
+    }
+
+    tools {
+        maven 'maven3.8'
+        ansible 'ansible'
+    }
+
+    stages {
+        stage('Clone Source Code') {
+            steps {
+                echo 'Cloning Repository...'
+                git branch: 'main', credentialsId: 'gitlab', url: 'https://gitlab.com/rns-app/student-app.git'
+            }
+        }
+        stage('Compile') {
+            steps {
+                echo 'Compile Source Code'
+                sh "mvn clean compile"
+            }
+        }
+        stage('Unit-Testing') {
+            steps {
+                echo 'Testing...'
+                sh "echo 2 | sudo alternatives --config java"
+                sh "mvn clean test"
+            }
+            post{
+              success {
+                junit 'target/surefire-reports/*.xml'
+              }
+            }
+        }
+        stage('Packaging') {
+            steps {
+                sh "echo 1 | sudo alternatives --config java"
+                echo "Packaging...."
+                sh "mvn clean package -DskipTests"
+            }
+            post{
+              success {
+                archiveArtifacts artifacts: 'target/*.war', followSymlinks: false
+              }
+            }
+        }
+        stage('Update DB Schema') {
+            steps {
+                echo "Updating DB Schema and Nginx Deployment..."
+                ansiblePlaybook becomeUser: 'devops', installation: 'ansible', inventory: 'ansible/hosts', playbook: 'ansible/create_db_schema.yml', sudoUser: 'devops'
+            }
+        }
+        stage('Deploy Application') {
+            steps {
+                echo "Deploying Student App..."
+                sh "cp target/student*.war ansible/files/student.war"
+                ansiblePlaybook becomeUser: 'devops', installation: 'ansible', inventory: 'ansible/hosts', playbook: 'ansible/deploy_war_file_tomcat.yml', sudoUser: 'devops'
+            }
+        }
+    }
+}

@@ -1,0 +1,70 @@
+pipeline {
+    agent {
+        label "BuildServer"
+    }
+
+    tools {
+        // Install the Maven version configured as "M3" and add it to the path.
+        maven "maven3.9.5"
+    }
+    
+
+    stages {
+        stage('Prepare Env') {
+            steps {
+                echo "Prepare Env"
+                git branch: 'main', credentialsId: 'gitlab', url: 'https://gitlab.com/rns-app/student-app.git'
+            }
+        }
+        stage('Compile Source Code') {
+            tools {
+                // Install the Maven version configured as "M3" and add it to the path.
+                maven "maven3.9.5"
+            }
+            steps {                
+                echo "Compile Source Code"
+                sh 'mvn clean compile'
+            }
+        }
+        stage('Pre Deployment Tests') {
+            steps {
+                echo 'Pre Deployment Tests'
+
+                // switch to java 8
+                sh 'java -version'
+                sh 'echo 2 | sudo alternatives --config java'
+
+                // Exeute test cases
+                sh 'mvn clean test'
+                
+                // switch to java 11
+                sh 'echo 1 | sudo alternatives --config java'
+                sh 'java -version'
+            }
+            post {
+                success{ 
+                    junit stdioRetention: '', testResults: 'target/surefire-reports/*.xml'
+                }
+            }
+        }
+        stage('Packaging App') {
+            steps {
+                echo 'Packaging App'
+
+                sh 'mvn clean package -DskipTests'
+            }
+            post{
+                success {
+                    archiveArtifacts artifacts: 'target/*.war', followSymlinks: false
+                }
+            }
+        }
+        stage('Deployment App') {
+            steps {
+                echo 'Deployment App'
+                sh "sudo chmod +x deploy_application.sh"
+                sh "sudo ./deploy_application.sh"
+            }
+        }
+    }
+}
